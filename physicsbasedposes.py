@@ -324,6 +324,41 @@ def generate_pose(shot_coordinates):
     }
 
 
+def pose_to_dataframe(pose):
+    """Convert pose dict to DataFrame with x, y columns."""
+    df = pd.DataFrame(pose).T
+    df.columns = ["x", "y"]
+    df.index.name = "node"
+    return df
+
+
+def find_nearest_node(pose_or_df, shot_coordinates):
+    """Find the body node nearest to the shot and return node name and distance."""
+    if isinstance(pose_or_df, dict):
+        df = pose_to_dataframe(pose_or_df)
+    else:
+        df = pose_or_df
+
+    sx, sy = shot_coordinates
+    dx = df["x"] - sx
+    dy = df["y"] - sy
+    d2 = dx * dx + dy * dy
+    nearest = d2.idxmin()
+    distance = float(np.sqrt(d2.loc[nearest]))
+    return nearest, distance
+
+
+def evaluate_save(pose_or_df, shot_coordinates, radius=1.0):
+    """Evaluate if a shot is saved (within radius of nearest body node)."""
+    node, distance = find_nearest_node(pose_or_df, shot_coordinates)
+    return {
+        "nearest_node": node,
+        "distance": distance,
+        "radius": float(radius),
+        "saved": bool(distance <= radius),
+    }
+
+
 # In[22]:
 
 
