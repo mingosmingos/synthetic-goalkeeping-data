@@ -156,7 +156,7 @@ def place_balance_arm(shoulder_coordinates, torso, region):
     return elbow, hand      
 
 
-# In[18]:
+# In[11]:
 
 
 def place_leg_toward_target(hip_coordinates, target_coordinates, region="right"):
@@ -263,7 +263,7 @@ def place_supporting_leg(hip_coordinates, region="center"):
     return knee, foot
 
 
-# In[ ]:
+# In[13]:
 
 
 def generate_pose(shot_coordinates):
@@ -290,13 +290,21 @@ def generate_pose(shot_coordinates):
     elif shot_coordinates[0] < torso["x"]:
         left_elbow, left_hand = place_arm_toward_target(left_shoulder, shot_coordinates, region="left")
         right_elbow, right_hand = place_balance_arm(right_shoulder, torso, region="right")
-        left_knee, left_foot = place_leg_toward_target(left_hip, shot_coordinates, region="left")
-        right_knee, right_foot = place_supporting_leg(right_hip, region="right")
+        if shot_coordinates[1] > torso["y"]*1.1:
+            left_knee, left_foot = place_supporting_leg(left_hip, region="center")
+            right_knee, right_foot = place_supporting_leg(right_hip, region="center")
+        else:
+            left_knee, left_foot = place_leg_toward_target(left_hip, shot_coordinates, region="left")
+            right_knee, right_foot = place_supporting_leg(right_hip, region="right")
     else:
         right_elbow, right_hand = place_arm_toward_target(right_shoulder, shot_coordinates, region="right")
         left_elbow, left_hand = place_balance_arm(left_shoulder, torso, region="left")
-        right_knee, right_foot = place_leg_toward_target(right_hip, shot_coordinates, region="right")
-        left_knee, left_foot = place_supporting_leg(left_hip, region="left")
+        if shot_coordinates[1] > torso["y"]*1.1:
+            right_knee, right_foot = place_supporting_leg(right_hip, region="center")
+            left_knee, left_foot = place_supporting_leg(left_hip, region="center")
+        else:
+            right_knee, right_foot = place_leg_toward_target(right_hip, shot_coordinates, region="right")
+            left_knee, left_foot = place_supporting_leg(left_hip, region="left")
 
     return {
         "torso": torso,
@@ -316,18 +324,18 @@ def generate_pose(shot_coordinates):
     }
 
 
-# In[19]:
+# In[22]:
 
 
 # Convert pose to DataFrame for better visualization
-pose = generate_pose([0, 25])
+pose = generate_pose([24, 3])
 pose_df = pd.DataFrame(pose).T  # Transpose to have nodes as rows
 pose_df.columns = ['x', 'y']
 pose_df.index.name = 'node'
 pose_df
 
 
-# In[20]:
+# In[23]:
 
 
 # Create scatter plot of the pose
@@ -363,7 +371,3 @@ plt.xlim(0, 27)
 plt.ylim(0, 27)
 plt.show()
 
-
-# # Graphs
-
-# In[16]:
