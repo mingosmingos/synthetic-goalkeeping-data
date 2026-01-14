@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[57]:
+# In[1]:
 
 
 import pandas as pd
@@ -9,88 +9,90 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# In[58]:
+# In[2]:
 
 
 rng = np.random.default_rng()
 
 
-# In[59]:
+# In[3]:
 
 
-df = pd.read_excel("Synthetic Data.xlsx")
-df.head()
-
-
-# In[60]:
-
-
-def get_player_info(player_id):
-    player = df[df["player_id"] == player_id]
-    if player.empty:
-        print(f"Player ID {player_id} not found.")
-        return None
-    return player
-
-
-# In[61]:
-
-
-def torso_coordinate_modifier(player, torso_coordinate, shot_coordinate, shot_velocity):
-    reflexes = player["reflexes"]
-    agility = player["agility"]
+def torso_coordinate_modifier(torso_coordinate, shot_coordinate):
     distance = shot_coordinate - torso_coordinate
-
-    torso_coordinate += distance * 0.2 * (reflexes * 1.54) / shot_velocity - (100 - agility) * 0.001
+    torso_coordinate += distance * 0.2
     return torso_coordinate
 
 
-# In[62]:
+# In[4]:
 
 
-def generate_torso_position(player, shot_coordinates, shot_velocity):
-    base_torso_coordinates = [player["base_torso_x"], player["base_torso_y"]]
+def generate_torso_position(shot_coordinates, base_torso_coordinates=None):
+    if base_torso_coordinates is None:
+        base_torso_coordinates = [13, 15]
 
-    torso = {
-        "x": torso_coordinate_modifier(player, base_torso_coordinates[0], shot_coordinates[0], shot_velocity),
-        "y": torso_coordinate_modifier(player, base_torso_coordinates[1], shot_coordinates[1], shot_velocity)
-    }
-    '''
     torso = {
         "x": torso_coordinate_modifier(base_torso_coordinates[0], shot_coordinates[0]),
         "y": torso_coordinate_modifier(base_torso_coordinates[1], shot_coordinates[1])
     }
-    '''
     return torso
 
 
-# In[63]:
+# In[5]:
 
 
-def generate_head_position(player, torso):
-    head_vertical_offset = player["head_vertical_offset"]
+generate_torso_position([0, 27])
+
+
+# In[6]:
+
+
+def generate_head_position(torso):
     head = {
         "x": torso["x"] + rng.normal(0, 0.2),
-        "y": torso["y"] + head_vertical_offset + rng.uniform(-0.3,0.1)
+        "y": torso["y"] + 2.5 + rng.uniform(-0.3,0.1)
     }
     return head
 
 
-# In[64]:
+# In[7]:
 
 
-def place_arm_toward_target(player, shoulder_coordinates, target_coordinates, region="center"):
-    max_reach = player["upper_arm_length"] + player["forearm_length"]
-    flexibility = player["flexibility"]
+generate_head_position(generate_torso_position([0, 27]))
+
+
+# In[8]:
+
+
+LIMB_LENGTHS = {
+    "upper_arm": 3.5,
+    "forearm": 3.0,
+    "thigh": 6.0,
+    "shin": 4.5
+}
+
+JOINT_LIMITS = {
+    "shoulder": (-90, 90),
+    "elbow": (0, 150),
+    "hip": (-90, 90),
+    "knee": (0, 150)
+}
+
+
+# In[9]:
+
+
+def place_arm_toward_target(shoulder_coordinates, target_coordinates, region="center"):
+    max_reach = LIMB_LENGTHS["upper_arm"] + LIMB_LENGTHS["forearm"]
 
     dx = target_coordinates[0] - shoulder_coordinates["x"]
     dy = target_coordinates[1] - shoulder_coordinates["y"]
     distance = np.sqrt(dx**2 + dy**2)
 
     if distance > max_reach:
-        reach_factor = max_reach * 0.95 * (flexibility * 0.01)
+        reach_factor = max_reach * 0.95
     else:
-        reach_factor = distance * rng.uniform(0.85, 0.98) * (flexibility * 0.01)
+        reach_factor = distance * rng.uniform(0.85, 0.98)
 
     hand = {
             "x": shoulder_coordinates["x"] + (dx / distance) * reach_factor,
@@ -100,8 +102,8 @@ def place_arm_toward_target(player, shoulder_coordinates, target_coordinates, re
     elbow = calculate_elbow_position(
         shoulder_coordinates,
         hand,
-        player["upper_arm_length"],
-        player["forearm_length"],
+        LIMB_LENGTHS["upper_arm"],
+        LIMB_LENGTHS["forearm"],
         region
     )
 
@@ -137,10 +139,10 @@ def calculate_elbow_position(shoulder, hand, upper_arm_length, forearm_length, r
     return elbow
 
 
-# In[65]:
+# In[10]:
 
 
-def place_balance_arm(player, shoulder_coordinates, torso, region):
+def place_balance_arm(shoulder_coordinates, torso, region):
     target_coordinates = [0, 0]
 
     if region == "right":
@@ -150,25 +152,24 @@ def place_balance_arm(player, shoulder_coordinates, torso, region):
 
     target_coordinates[1] = torso["y"] + rng.uniform(-1, 2)
 
-    elbow, hand = place_arm_toward_target(player, shoulder_coordinates, target_coordinates, region)
+    elbow, hand = place_arm_toward_target(shoulder_coordinates, target_coordinates, region)
     return elbow, hand      
 
 
-# In[66]:
+# In[11]:
 
 
-def place_leg_toward_target(player, hip_coordinates, target_coordinates, region="right"):
-    max_reach = player["thigh_length"] + player["shin_length"]
-    flexibility = player["flexibility"]
+def place_leg_toward_target(hip_coordinates, target_coordinates, region="right"):
+    max_reach = LIMB_LENGTHS["thigh"] + LIMB_LENGTHS["shin"]
 
     dx = target_coordinates[0] - hip_coordinates["x"]
     dy = target_coordinates[1] - hip_coordinates["y"]
     distance = np.sqrt(dx**2 + dy**2)
 
     if distance > max_reach:
-        reach_factor = max_reach * 0.95 * (flexibility * 0.01)
+        reach_factor = max_reach * 0.95
     else:
-        reach_factor = distance * rng.uniform(0.85, 0.98) * (flexibility * 0.01)
+        reach_factor = distance * rng.uniform(0.85, 0.98)
 
     foot = {
             "x": hip_coordinates["x"] + (dx / distance) * reach_factor,
@@ -178,8 +179,8 @@ def place_leg_toward_target(player, hip_coordinates, target_coordinates, region=
     knee = calculate_knee_position(
         hip_coordinates,
         foot,
-        player["thigh_length"],
-        player["shin_length"],
+        LIMB_LENGTHS["thigh"],
+        LIMB_LENGTHS["shin"],
         region
     )
 
@@ -233,6 +234,8 @@ def calculate_knee_position(hip, foot, thigh_length, shin_length, region):
     }
     '''
 
+
+
     knee = {
         "x": hip["x"] + x * ux + sign * h * px,
         "y": hip["y"] + x * uy + sign * h * py
@@ -241,10 +244,10 @@ def calculate_knee_position(hip, foot, thigh_length, shin_length, region):
     return knee
 
 
-# In[67]:
+# In[12]:
 
 
-def place_supporting_leg(player, hip_coordinates, region="center"):
+def place_supporting_leg(hip_coordinates, region="center"):
     target_coordinates = [0, 0]
 
     if region == "center":
@@ -256,53 +259,52 @@ def place_supporting_leg(player, hip_coordinates, region="center"):
 
     target_coordinates[1] = rng.uniform(0, 3)
 
-    knee, foot = place_leg_toward_target(player, hip_coordinates, target_coordinates, region)
+    knee, foot = place_leg_toward_target(hip_coordinates, target_coordinates, region)
     return knee, foot
 
 
-# In[68]:
+# In[13]:
 
 
-def generate_pose(player_id, shot_coordinates, shot_velocity):
-    player = get_player_info(player_id).iloc[0]
-    torso = generate_torso_position(player, shot_coordinates, shot_velocity)
-    head = generate_head_position(player, torso)
+def generate_pose(shot_coordinates):
+    torso = generate_torso_position(shot_coordinates)
+    head = generate_head_position(torso)
 
-    shoulder_horizontal_offset = player["shoulder_horizontal_offset"]
-    shoulder_vertical_offset = player["shoulder_vertical_offset"]
+    shoulder_horizontal_offset = 2
+    shoulder_vertical_offset = 1.5
     left_shoulder = {"x": torso["x"] - shoulder_horizontal_offset, "y": torso["y"] + shoulder_vertical_offset}
     right_shoulder = {"x": torso["x"] + shoulder_horizontal_offset, "y": torso["y"] + shoulder_vertical_offset}
 
-    hip_horizontal_offset = player["hip_horizontal_offset"]
-    hip_vertical_offset = player["hip_vertical_offset"]
+    hip_horizontal_offset = 1.5
+    hip_vertical_offset = 3
     left_hip = {"x": torso["x"] - hip_horizontal_offset, "y": torso["y"] - hip_vertical_offset}
     right_hip = {"x": torso["x"] + hip_horizontal_offset, "y": torso["y"] - hip_vertical_offset}
 
     dx = shot_coordinates[0] - torso["x"]
 
     if shoulder_horizontal_offset > abs(dx):
-        left_elbow, left_hand = place_arm_toward_target(player, left_shoulder, shot_coordinates, region="center")
-        right_elbow, right_hand = place_arm_toward_target(player, right_shoulder, shot_coordinates, region="center")
-        left_knee, left_foot = place_supporting_leg(player, left_hip, region="center")
-        right_knee, right_foot = place_supporting_leg(player, right_hip, region="center")
+        left_elbow, left_hand = place_arm_toward_target(left_shoulder, shot_coordinates, region="center")
+        right_elbow, right_hand = place_arm_toward_target(right_shoulder, shot_coordinates, region="center")
+        left_knee, left_foot = place_supporting_leg(left_hip, region="center")
+        right_knee, right_foot = place_supporting_leg(right_hip, region="center")
     elif shot_coordinates[0] < torso["x"]:
-        left_elbow, left_hand = place_arm_toward_target(player, left_shoulder, shot_coordinates, region="left")
-        right_elbow, right_hand = place_balance_arm(player, right_shoulder, torso, region="right")
+        left_elbow, left_hand = place_arm_toward_target(left_shoulder, shot_coordinates, region="left")
+        right_elbow, right_hand = place_balance_arm(right_shoulder, torso, region="right")
         if shot_coordinates[1] > torso["y"]*1.1:
-            left_knee, left_foot = place_supporting_leg(player, left_hip, region="center")
-            right_knee, right_foot = place_supporting_leg(player, right_hip, region="center")
+            left_knee, left_foot = place_supporting_leg(left_hip, region="center")
+            right_knee, right_foot = place_supporting_leg(right_hip, region="center")
         else:
-            left_knee, left_foot = place_leg_toward_target(player, left_hip, shot_coordinates, region="left")
-            right_knee, right_foot = place_supporting_leg(player, right_hip, region="right")
+            left_knee, left_foot = place_leg_toward_target(left_hip, shot_coordinates, region="left")
+            right_knee, right_foot = place_supporting_leg(right_hip, region="right")
     else:
-        right_elbow, right_hand = place_arm_toward_target(player, right_shoulder, shot_coordinates, region="right")
-        left_elbow, left_hand = place_balance_arm(player, left_shoulder, torso, region="left")
+        right_elbow, right_hand = place_arm_toward_target(right_shoulder, shot_coordinates, region="right")
+        left_elbow, left_hand = place_balance_arm(left_shoulder, torso, region="left")
         if shot_coordinates[1] > torso["y"]*1.1:
-            right_knee, right_foot = place_supporting_leg(player, right_hip, region="center")
-            left_knee, left_foot = place_supporting_leg(player, left_hip, region="center")
+            right_knee, right_foot = place_supporting_leg(right_hip, region="center")
+            left_knee, left_foot = place_supporting_leg(left_hip, region="center")
         else:
-            right_knee, right_foot = place_leg_toward_target(player, right_hip, shot_coordinates, region="right")
-            left_knee, left_foot = place_supporting_leg(player, left_hip, region="left")
+            right_knee, right_foot = place_leg_toward_target(right_hip, shot_coordinates, region="right")
+            left_knee, left_foot = place_supporting_leg(left_hip, region="left")
 
     return {
         "torso": torso,
@@ -320,9 +322,6 @@ def generate_pose(player_id, shot_coordinates, shot_velocity):
         "right_knee": right_knee,
         "right_foot": right_foot
     }
-
-
-# In[77]:
 
 def pose_to_dataframe(pose):
     """Convert pose dict to DataFrame with x, y columns."""
@@ -359,17 +358,29 @@ def evaluate_save(pose_or_df, shot_coordinates, radius=1.0):
     }
 
 
-pose = generate_pose(0, [24, 23], 100)
-pose_df = pd.DataFrame(pose).T
+# In[22]:
+
+
+# Convert pose to DataFrame for better visualization
+pose = generate_pose([24, 3])
+pose_df = pd.DataFrame(pose).T  # Transpose to have nodes as rows
 pose_df.columns = ['x', 'y']
 pose_df.index.name = 'node'
+pose_df
 
+
+# In[23]:
+
+
+# Create scatter plot of the pose
 plt.figure(figsize=(10, 12))
 plt.scatter(pose_df['x'], pose_df['y'], s=100, c='blue', alpha=0.6, edgecolors='black')
 
+# Label each node
 for node, (x, y) in pose_df.iterrows():
     plt.annotate(node, (x, y), xytext=(5, 5), textcoords='offset points', fontsize=8)
 
+# Draw skeleton connections
 connections = [
     ('torso', 'head'),
     ('torso', 'left_shoulder'), ('torso', 'right_shoulder'),
