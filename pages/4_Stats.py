@@ -31,7 +31,7 @@ perf_df = load_players()  # player_id, saved, conceded
 perf_df = perf_df.copy()
 perf_df["shots_faced"] = perf_df["saved"] + perf_df["conceded"]
 perf_df["save_pct"] = perf_df["saved"] / perf_df["shots_faced"]
-full_df = attr_df.merge(perf_df, on="player_id", how="left")
+full_df = attr_df.merge(perf_df, on="player_id", how="left", suffixes=("", "_perf"))
 
 # Small table, escondida por defeito
 with st.expander("Ver tabela completa de guarda-redes"):
