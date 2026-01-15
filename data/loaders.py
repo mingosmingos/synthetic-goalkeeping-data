@@ -22,3 +22,7 @@ def load_matches():
 #@st.cache_data
 #def load_shooters():
 #    return pd.read_excel(data, sheet_name="Shooters")
+
+@st.cache_data
+def load_injuries():
+    return pd.read_excel(data, sheet_name="Injuries")
