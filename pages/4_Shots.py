@@ -6,12 +6,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from data.loaders import load_shots
+from data.loaders import load_shots, load_appearances, load_players
 from physicsbasedposes import pose_to_dataframe
 
 st.title("Shots")
 
 shots_df = load_shots()
+appearances_df = load_appearances()
+players_df = load_players()
 
 # Sidebar filters
 with st.sidebar:
@@ -65,6 +67,39 @@ if not filtered_shots.empty:
     
     if selected_shot_idx is not None:
         shot = filtered_shots.loc[selected_shot_idx]
+
+        # Resolve keeper name via appearance_id -> player_id -> player name
+        keeper_name = None
+        player_id = None
+        appearance_id = shot.get('appearance_id')
+
+        if appearance_id is not None and appearances_df is not None and not appearances_df.empty:
+            if 'appearance_id' in appearances_df.columns:
+                appearance_row = appearances_df[appearances_df['appearance_id'] == appearance_id]
+            elif appearance_id in appearances_df.index:
+                appearance_row = appearances_df.loc[[appearance_id]]
+            else:
+                appearance_row = pd.DataFrame()
+
+            if not appearance_row.empty and 'player_id' in appearance_row.columns:
+                player_id = appearance_row.iloc[0]['player_id']
+
+        if player_id is not None and players_df is not None and not players_df.empty:
+            if 'player_id' in players_df.columns:
+                player_row = players_df[players_df['player_id'] == player_id]
+            elif player_id in players_df.index:
+                player_row = players_df.loc[[player_id]]
+            else:
+                player_row = pd.DataFrame()
+
+            if not player_row.empty:
+                for name_col in ('name', 'player_name', 'keeper_name'):
+                    if name_col in player_row.columns:
+                        keeper_name = str(player_row.iloc[0][name_col])
+                        break
+
+        if keeper_name is None:
+            keeper_name = str(player_id) if player_id is not None else "Unknown"
         
         st.divider()
         st.subheader("Shot Details")
@@ -72,7 +107,7 @@ if not filtered_shots.empty:
         # Display shot info
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Shot ID", selected_shot_idx)
+            st.metric("Keeper", keeper_name)
         with col2:
             st.metric("Result", "⚽ Goal" if not shot['saved'] else "🧤 Save")
         with col3:
@@ -127,15 +162,33 @@ if not filtered_shots.empty:
             x_vals = [pose_df.loc[node1, 'x'], pose_df.loc[node2, 'x']]
             y_vals = [pose_df.loc[node1, 'y'], pose_df.loc[node2, 'y']]
             ax.plot(x_vals, y_vals, 'k-', alpha=0.5, linewidth=2)
+
+        # Highlight nearest node (already stored in the shot row)
+        nearest_node = shot.get('nearest_node')
+        if isinstance(nearest_node, str) and nearest_node in pose_df.index:
+            nx, ny = float(pose_df.loc[nearest_node, 'x']), float(pose_df.loc[nearest_node, 'y'])
+            ax.scatter(nx, ny, s=160, color='orange', zorder=4, label=f'Nearest node ({nearest_node})')
+            circle = Circle(
+                (nx, ny),
+                float(shot.get('radius', 1.0)),
+                color='green' if shot['saved'] else 'red',
+                fill=False,
+                linestyle='--',
+                linewidth=2,
+                alpha=0.7,
+            )
+            ax.add_patch(circle)
+        else:
+            st.warning("Nearest node not found for this shot; showing pose without highlight.")
         
         # Plot shot location
-        ax.scatter(shot['x'], shot['y'], s=200, marker='*', 
-                  color='green' if not shot['saved'] else 'red', 
+        ax.scatter(shot['x'], shot['y'], s=200, marker='x', 
+                  color='green' if shot['saved'] else 'red', 
                   label='Shot', zorder=5)
         
         ax.set_xlabel('X Position')
         ax.set_ylabel('Y Position')
-        ax.set_title(f"Shot #{selected_shot_idx} - {'Goal' if not shot['saved'] else 'Save'}")
+        #ax.set_title(f"Shot #{selected_shot_idx} - {'Goal' if not shot['saved'] else 'Save'}")
         ax.legend()
         ax.grid(True, alpha=0.3)
         ax.axis('equal')
