@@ -19,6 +19,6 @@ def load_players():
 def load_matches():
     return pd.read_excel(data, sheet_name="Matches")
 
-@st.cache_data
-def load_shooters():
-    return pd.read_excel(data, sheet_name="Shooters")
+#@st.cache_data
+#def load_shooters():
+#    return pd.read_excel(data, sheet_name="Shooters")

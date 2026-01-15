@@ -21,19 +21,19 @@ with st.sidebar:
     result_filter = st.radio("Result", ["All", "Goals", "Saves"])
     
     # Filter by appearance
-    appearances = sorted(shots_df['appearance'].unique())
+    appearances = sorted(shots_df['appearance_id'].unique())
     selected_appearance = st.selectbox("Appearance", ["All"] + appearances)
 
 # Apply filters
 filtered_shots = shots_df.copy()
 
 if result_filter == "Goals":
-    filtered_shots = filtered_shots[filtered_shots['isgoal'] == True]
+    filtered_shots = filtered_shots[filtered_shots['saved'] == False]
 elif result_filter == "Saves":
-    filtered_shots = filtered_shots[filtered_shots['isgoal'] == False]
+    filtered_shots = filtered_shots[filtered_shots['saved'] == True]
 
 if selected_appearance != "All":
-    filtered_shots = filtered_shots[filtered_shots['appearance'] == selected_appearance]
+    filtered_shots = filtered_shots[filtered_shots['appearance_id'] == selected_appearance]
 
 st.subheader(f"Shots ({len(filtered_shots)})")
 
@@ -56,7 +56,7 @@ if not filtered_shots.empty:
         "Select a shot to view details:", 
         shot_options,
         index=default_idx,
-        format_func=lambda x: f"Shot #{x} - {'⚽ Goal' if filtered_shots.loc[x, 'isgoal'] else '🧤 Save'}"
+        format_func=lambda x: f"Shot #{x} - {'⚽ Goal' if not filtered_shots.loc[x, 'saved'] else '🧤 Save'}"
     )
     
     # Clear the session state after using it
@@ -74,7 +74,7 @@ if not filtered_shots.empty:
         with col1:
             st.metric("Shot ID", selected_shot_idx)
         with col2:
-            st.metric("Result", "⚽ Goal" if shot['isgoal'] else "🧤 Save")
+            st.metric("Result", "⚽ Goal" if not shot['saved'] else "🧤 Save")
         with col3:
             st.metric("Position", f"({shot['x']:.1f}, {shot['y']:.1f})")
         with col4:
@@ -130,12 +130,12 @@ if not filtered_shots.empty:
         
         # Plot shot location
         ax.scatter(shot['x'], shot['y'], s=200, marker='*', 
-                  color='green' if shot['isgoal'] else 'red', 
+                  color='green' if not shot['saved'] else 'red', 
                   label='Shot', zorder=5)
         
         ax.set_xlabel('X Position')
         ax.set_ylabel('Y Position')
-        ax.set_title(f"Shot #{selected_shot_idx} - {'Goal' if shot['isgoal'] else 'Save'}")
+        ax.set_title(f"Shot #{selected_shot_idx} - {'Goal' if not shot['saved'] else 'Save'}")
         ax.legend()
         ax.grid(True, alpha=0.3)
         ax.axis('equal')
