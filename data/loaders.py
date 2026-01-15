@@ -25,4 +25,8 @@ def load_matches():
 
 @st.cache_data
 def load_injuries():
-    return pd.read_excel("data/output.xlsx", sheet_name="Injuries")
+    return pd.read_excel("data/injuries.xlsx", sheet_name="Injuries")
+
+@st.cache_data
+def load_optimal_poses():
+    return pd.read_excel("data\output_with_optimal_poses.xlsx", sheet_name=0)

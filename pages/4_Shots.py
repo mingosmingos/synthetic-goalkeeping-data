@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from data.loaders import load_shots, load_appearances, load_players
-from physicsbasedposes import pose_to_dataframe
+from physicsbasedposes import find_nearest_node, generate_pose, pose_to_dataframe
 
 st.title("Shots")
 
@@ -42,28 +42,20 @@ st.subheader(f"Shots ({len(filtered_shots)})")
 # Select a shot to view details
 if not filtered_shots.empty:
     shot_options = filtered_shots.index.tolist()
-    
-    # Check if a shot was selected from another page
-    default_shot = st.session_state.get('selected_shot', shot_options[0])
-    if default_shot not in shot_options:
-        default_shot = shot_options[0]
-    
-    # Get index in list for default value
-    try:
-        default_idx = shot_options.index(default_shot)
-    except ValueError:
-        default_idx = 0
-    
+
+    # Seed the selectbox from navigation state once, then rely on widget state.
+    nav_shot = st.session_state.pop('selected_shot', None)
+    if nav_shot in shot_options:
+        st.session_state['shot_selector'] = nav_shot
+    if 'shot_selector' not in st.session_state or st.session_state['shot_selector'] not in shot_options:
+        st.session_state['shot_selector'] = shot_options[0]
+
     selected_shot_idx = st.selectbox(
-        "Select a shot to view details:", 
+        "Select a shot to view details:",
         shot_options,
-        index=default_idx,
-        format_func=lambda x: f"Shot #{x} - {'⚽ Goal' if not filtered_shots.loc[x, 'saved'] else '🧤 Save'}"
+        key='shot_selector',
+        format_func=lambda x: f"Shot #{x} - {'⚽ Goal' if not filtered_shots.loc[x, 'saved'] else '🧤 Save'}",
     )
-    
-    # Clear the session state after using it
-    if 'selected_shot' in st.session_state:
-        del st.session_state['selected_shot']
     
     if selected_shot_idx is not None:
         shot = filtered_shots.loc[selected_shot_idx]
@@ -117,6 +109,7 @@ if not filtered_shots.empty:
         
         # Visualize goalkeeper pose
         st.subheader("Goalkeeper Pose Visualization")
+        show_optimal_overlay = st.checkbox("Overlay optimal pose", value=True, key="overlay_optimal_pose")
         
         # Extract pose data from the shot row
         body_nodes = [
@@ -135,16 +128,47 @@ if not filtered_shots.empty:
                 'y': shot[f'{node}_y']
             }
         
-        pose_df = pose_to_dataframe(pose)
+        recorded_pose_df = pose_to_dataframe(pose)
+
+        # Compute a "generated (optimal)" pose for the same shot + keeper
+        generated_pose_df = None
+        try:
+            pid_for_opt = int(player_id) if player_id is not None and pd.notna(player_id) else None
+            if pid_for_opt is not None:
+                opt_pose = generate_pose(pid_for_opt, [float(shot["x"]), float(shot["y"])], float(shot["velocity"]))
+                generated_pose_df = pose_to_dataframe(opt_pose)
+        except Exception:
+            generated_pose_df = None
+
+        # Recorded pose is always the primary pose.
+        main_pose_df = recorded_pose_df
+        overlay_pose_df = generated_pose_df
         
         # Create visualization
         fig, ax = plt.subplots(figsize=(10, 12))
         
-        # Plot nodes
-        ax.scatter(pose_df['x'], pose_df['y'], s=100, c='blue', alpha=0.6, edgecolors='black')
+        # If we can't generate the optimal pose, just hide the overlay.
+        if overlay_pose_df is None or overlay_pose_df.empty:
+            if show_optimal_overlay:
+                st.caption("Optimal pose not available for this shot.")
+            show_optimal_overlay = False
+
+        # Plot nodes (primary) — recorded pose should never change transparency
+        ax.scatter(main_pose_df['x'], main_pose_df['y'], s=100, c='blue', alpha=0.65, edgecolors='black')
+        # Plot nodes (overlay) — optimal pose is always transparent when enabled
+        if show_optimal_overlay and overlay_pose_df is not None and not overlay_pose_df.empty:
+            ax.scatter(
+                overlay_pose_df['x'],
+                overlay_pose_df['y'],
+                s=90,
+                c='gray',
+                alpha=0.16,
+                edgecolors='none',
+                label='Optimal pose (overlay)',
+            )
         
         # Label each node
-        for node, (x, y) in pose_df.iterrows():
+        for node, (x, y) in main_pose_df.iterrows():
             ax.annotate(node, (x, y), xytext=(5, 5), textcoords='offset points', fontsize=8)
         
         # Draw skeleton connections
@@ -159,27 +183,45 @@ if not filtered_shots.empty:
         ]
         
         for node1, node2 in connections:
-            x_vals = [pose_df.loc[node1, 'x'], pose_df.loc[node2, 'x']]
-            y_vals = [pose_df.loc[node1, 'y'], pose_df.loc[node2, 'y']]
+            x_vals = [main_pose_df.loc[node1, 'x'], main_pose_df.loc[node2, 'x']]
+            y_vals = [main_pose_df.loc[node1, 'y'], main_pose_df.loc[node2, 'y']]
             ax.plot(x_vals, y_vals, 'k-', alpha=0.5, linewidth=2)
+            if show_optimal_overlay and overlay_pose_df is not None and node1 in overlay_pose_df.index and node2 in overlay_pose_df.index:
+                ox_vals = [overlay_pose_df.loc[node1, 'x'], overlay_pose_df.loc[node2, 'x']]
+                oy_vals = [overlay_pose_df.loc[node1, 'y'], overlay_pose_df.loc[node2, 'y']]
+                ax.plot(ox_vals, oy_vals, color='gray', alpha=0.16, linewidth=2)
 
-        # Highlight nearest node (already stored in the shot row)
-        nearest_node = shot.get('nearest_node')
-        if isinstance(nearest_node, str) and nearest_node in pose_df.index:
-            nx, ny = float(pose_df.loc[nearest_node, 'x']), float(pose_df.loc[nearest_node, 'y'])
+        # Highlight nearest node for the recorded (primary) pose
+        radius = float(shot.get('radius', 1.0))
+        nearest_node = None
+        distance = None
+        candidate = shot.get('nearest_node')
+        if isinstance(candidate, str) and candidate in main_pose_df.index:
+            nearest_node = candidate
+            try:
+                distance = float(shot.get('distance')) if pd.notna(shot.get('distance')) else None
+            except Exception:
+                distance = None
+        else:
+            try:
+                nearest_node, distance = find_nearest_node(main_pose_df, [float(shot['x']), float(shot['y'])])
+            except Exception:
+                nearest_node, distance = None, None
+
+        if isinstance(nearest_node, str) and nearest_node in main_pose_df.index:
+            nx, ny = float(main_pose_df.loc[nearest_node, 'x']), float(main_pose_df.loc[nearest_node, 'y'])
+            is_saved = bool(distance <= radius) if distance is not None else bool(shot.get('saved', False))
             ax.scatter(nx, ny, s=160, color='orange', zorder=4, label=f'Nearest node ({nearest_node})')
             circle = Circle(
                 (nx, ny),
-                float(shot.get('radius', 1.0)),
-                color='green' if shot['saved'] else 'red',
+                radius,
+                color='green' if is_saved else 'red',
                 fill=False,
                 linestyle='--',
                 linewidth=2,
                 alpha=0.7,
             )
             ax.add_patch(circle)
-        else:
-            st.warning("Nearest node not found for this shot; showing pose without highlight.")
         
         # Plot shot location
         ax.scatter(shot['x'], shot['y'], s=200, marker='x', 

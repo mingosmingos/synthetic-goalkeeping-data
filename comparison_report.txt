@@ -1,0 +1,29 @@
+================================================================================
+GOALKEEPER PERFORMANCE COMPARISON REPORT
+================================================================================
+
+📊 OVERALL STATISTICS
+Total shots analyzed: 737
+
+Original Performance:
+  • Saves: 247 (33.5%)
+  • Goals conceded: 490 (66.5%)
+
+Optimal ML Performance:
+  • Saves: 247 (33.5%)
+  • Goals conceded: 490 (66.5%)
+
+✨ IMPROVEMENT
+  • Additional saves: 0 (+0.0%)
+  • Percentage point gain: +0.0pp
+
+📏 DISTANCE METRICS
+  • Original avg distance: 1.547
+  • Optimal avg distance: 2.078
+  • Improvement: -0.531 (-34.3%)
+
+🎯 BREAKDOWN BY SHOT TYPE
+  • 0-80 km/h: 0.0% → 0.0% (+0.0pp)
+  • 80-100 km/h: 0.0% → 0.0% (+0.0pp)
+  • 100-120 km/h: 0.0% → 0.0% (+0.0pp)
+  • 120-200 km/h: 0.0% → 0.0% (+0.0pp)
